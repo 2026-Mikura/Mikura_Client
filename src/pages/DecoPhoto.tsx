@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getStroke } from "perfect-freehand";
+import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
 import bg from "../assets/basicBg.png";
 import brush1 from "../assets/brush1.png";
@@ -15,12 +16,15 @@ import check1 from "../assets/check1.png";
 import check2 from "../assets/check2.png";
 import check3 from "../assets/check3.png";
 import decoFrameTransparent from "../assets/decoFrameTransparent.png";
+import nextButton from "../assets/nextButton.png";
 import removeButton from "../assets/removeButton.png";
 import slideButton from "../assets/slideButton.png";
 import FullScreenBackground from "../components/FullScreenBackground";
 import { ManitoText, MulmaruText } from "../components/PikuraText";
 
 const PHOTO_SLOT_COUNT = 4;
+const DECORATION_TIME_LIMIT_SECONDS = 120;
+const DECORATED_PHOTO_EXPORT_SCALE = 2;
 type StickerSize = "tiny" | "small" | "medium" | "large" | "xlarge" | "huge";
 type StickerLayout = "grid" | "imageGrid" | "wrap";
 type StickerGap = "normal" | "loose";
@@ -396,6 +400,130 @@ function redrawDrawingCanvas(canvas: HTMLCanvasElement | null, strokes: DrawStro
   strokes.forEach((stroke) => drawStroke(ctx, stroke));
 }
 
+function loadCanvasImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("이미지를 불러오지 못했습니다."));
+    image.src = src;
+  });
+}
+
+function drawImageCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, width: number, height: number) {
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const canvasRatio = width / height;
+  const drawWidth = imageRatio > canvasRatio ? height * imageRatio : width;
+  const drawHeight = imageRatio > canvasRatio ? height : width / imageRatio;
+  const drawX = (width - drawWidth) / 2;
+  const drawY = (height - drawHeight) / 2;
+
+  ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+}
+
+async function renderDecoratedPhoto(
+  photo: string,
+  decoration: PhotoDecoration,
+  width: number,
+  height: number,
+  scale = DECORATED_PHOTO_EXPORT_SCALE,
+  quality = 0.92,
+) {
+  const canvas = document.createElement("canvas");
+  const renderWidth = Math.max(1, Math.round(width));
+  const renderHeight = Math.max(1, Math.round(height));
+  canvas.width = renderWidth * scale;
+  canvas.height = renderHeight * scale;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return photo;
+  }
+
+  ctx.scale(scale, scale);
+  const baseImage = await loadCanvasImage(photo);
+  drawImageCover(ctx, baseImage, renderWidth, renderHeight);
+  decoration.drawStrokes.forEach((stroke) => drawStroke(ctx, stroke));
+
+  for (const sticker of decoration.stickers.slice().sort((firstSticker, secondSticker) => firstSticker.zIndex - secondSticker.zIndex)) {
+    await drawSticker(ctx, sticker);
+  }
+
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+function renderDecoratedPhotos(
+  photos: string[],
+  decorations: PhotoDecoration[],
+  width: number,
+  height: number,
+  scale = DECORATED_PHOTO_EXPORT_SCALE,
+  quality = 0.92,
+) {
+  return Promise.all(
+    photos.map(async (photo, index) => {
+      try {
+        return await renderDecoratedPhoto(
+          photo,
+          decorations[index] ?? createEmptyPhotoDecoration(),
+          width,
+          height,
+          scale,
+          quality,
+        );
+      } catch (error) {
+        console.warn("Failed to render decorated photo", error);
+        return photo;
+      }
+    }),
+  );
+}
+
+async function drawSticker(ctx: CanvasRenderingContext2D, sticker: PlacedSticker) {
+  ctx.save();
+  ctx.translate(sticker.x, sticker.y);
+  ctx.rotate((sticker.rotation * Math.PI) / 180);
+
+  if (sticker.kind === "image") {
+    const stickerImage = await loadCanvasImage(sticker.label);
+    ctx.drawImage(stickerImage, -sticker.width / 2, -sticker.height / 2, sticker.width, sticker.height);
+    ctx.restore();
+    return;
+  }
+
+  drawTextSticker(ctx, sticker);
+  ctx.restore();
+}
+
+function drawTextSticker(ctx: CanvasRenderingContext2D, sticker: PlacedSticker) {
+  const fontSize = Math.max(10, sticker.height * 0.72);
+  const lineHeight = sticker.font === "mulmaruMono" ? fontSize : fontSize * 1.15;
+  const lines = sticker.label.split("\n");
+  const totalHeight = lineHeight * lines.length;
+
+  ctx.font = `500 ${fontSize}px ${STICKER_FONT_FAMILY[sticker.font]}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = sticker.color;
+  ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+  ctx.shadowBlur = 3.406;
+
+  lines.forEach((line, index) => {
+    const y = -totalHeight / 2 + lineHeight * index + lineHeight / 2;
+
+    if (sticker.font === "mulmaruMono") {
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 5.11;
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "#fff";
+      ctx.strokeText(line, 0, y);
+      ctx.restore();
+    }
+
+    ctx.fillText(line, 0, y);
+  });
+}
+
 function drawStroke(ctx: CanvasRenderingContext2D, stroke: DrawStroke) {
   if (stroke.points.length === 0) {
     return;
@@ -734,13 +862,18 @@ function drawDirectionalGrain(
 }
 
 export default function DecoPhoto() {
+  const navigate = useNavigate();
   const photos = useMemo(() => getSelectedPhotos(), []);
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const currentStrokeRef = useRef<DrawStroke | null>(null);
   const stickerEditRef = useRef<StickerEditState | null>(null);
+  const isFinishingRef = useRef(false);
+  const activePhotoIndexRef = useRef(0);
+  const photoDecorationsRef = useRef<PhotoDecoration[]>([]);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [timerSeconds, setTimerSeconds] = useState(DECORATION_TIME_LIMIT_SECONDS);
   const [activeStickerGroupIndex, setActiveStickerGroupIndex] = useState(0);
   const [selectedHue, setSelectedHue] = useState(326);
   const [colorTone, setColorTone] = useState(58);
@@ -761,6 +894,44 @@ export default function DecoPhoto() {
   const redrawCanvas = useCallback((nextStrokes: DrawStroke[]) => {
     redrawDrawingCanvas(drawingCanvasRef.current, nextStrokes);
   }, []);
+
+  const finishDecoration = useCallback(async () => {
+    if (isFinishingRef.current) {
+      return;
+    }
+
+    isFinishingRef.current = true;
+    const currentStroke = currentStrokeRef.current;
+    const finalDecorations = photoDecorationsRef.current.map((decoration, index) =>
+      index === activePhotoIndexRef.current && currentStroke
+        ? { ...decoration, drawStrokes: [...decoration.drawStrokes, currentStroke] }
+        : decoration,
+    );
+    const rect = canvasWrapRef.current?.querySelector("[data-photo-layer]")?.getBoundingClientRect();
+    const renderWidth = rect?.width || 840;
+    const renderHeight = rect?.height || 500;
+
+    try {
+      if ("fonts" in document) {
+        await document.fonts.ready;
+      }
+
+      const decoratedPhotos = await renderDecoratedPhotos(photos, finalDecorations, renderWidth, renderHeight);
+
+      try {
+        sessionStorage.setItem("mikuraDecoratedPhotos", JSON.stringify(decoratedPhotos));
+      } catch (error) {
+        console.warn("Failed to save high quality decorated photos, retrying smaller images", error);
+        const smallerDecoratedPhotos = await renderDecoratedPhotos(photos, finalDecorations, renderWidth, renderHeight, 1, 0.82);
+        sessionStorage.setItem("mikuraDecoratedPhotos", JSON.stringify(smallerDecoratedPhotos));
+      }
+    } catch (error) {
+      console.warn("Failed to save decorated photos", error);
+      sessionStorage.setItem("mikuraDecoratedPhotos", JSON.stringify(photos));
+    }
+
+    navigate("/selectframe", { replace: true });
+  }, [navigate, photos]);
 
   function updateActiveDecoration(updater: (decoration: PhotoDecoration) => PhotoDecoration) {
     setPhotoDecorations((currentDecorations) =>
@@ -819,6 +990,30 @@ export default function DecoPhoto() {
   useEffect(() => {
     redrawCanvas(drawStrokes);
   }, [drawStrokes, redrawCanvas]);
+
+  useEffect(() => {
+    activePhotoIndexRef.current = activePhotoIndex;
+  }, [activePhotoIndex]);
+
+  useEffect(() => {
+    photoDecorationsRef.current = photoDecorations;
+  }, [photoDecorations]);
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setTimerSeconds((currentSeconds) => {
+        if (currentSeconds <= 1) {
+          window.clearInterval(timerId);
+          void finishDecoration();
+          return 0;
+        }
+
+        return currentSeconds - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, [finishDecoration]);
 
   useEffect(() => {
     setSelectedStickerId(null);
@@ -1123,7 +1318,7 @@ export default function DecoPhoto() {
   return (
     <FullScreenBackground background={bg}>
       <GuideText>브러쉬와 스티커를 드래그해서 사진을 꾸며보세요~</GuideText>
-      <TimerText>58</TimerText>
+      <TimerText>{timerSeconds}</TimerText>
 
       <PhotoStrip>
         {Array.from({ length: PHOTO_SLOT_COUNT }, (_, index) => {
@@ -1421,6 +1616,10 @@ export default function DecoPhoto() {
           </BrushPanel>
         </ToolPanel>
       </WorkArea>
+
+      <NextButton type="button" aria-label="다음" onClick={finishDecoration}>
+        <img src={nextButton} alt="" />
+      </NextButton>
     </FullScreenBackground>
   );
 }
@@ -2232,4 +2431,23 @@ const BrushScrollRail = styled.div`
   width: 4px;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(122, 122, 122, 0.70), rgba(122, 122, 122, 0.46));
+`;
+
+const NextButton = styled.button`
+  position: absolute;
+  right: 6%;
+  bottom: 9%;
+  z-index: 9;
+  width: 72px;
+  height: 72px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+
+  & > img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
 `;

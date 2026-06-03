@@ -9,6 +9,8 @@ const PhotoBook = lazy(() => import('./pages/PhotoBook'))
 const Camera = lazy(() => import('./pages/Camera'))
 const SelectPhoto = lazy(() => import('./pages/SelectPhoto'))
 const DecoPhoto = lazy(() => import('./pages/DecoPhoto'))
+const SelectFrame = lazy(() => import('./pages/SelectFrame'))
+const CompletedPhoto = lazy(() => import('./pages/CompletedPhoto'))
 
 function App() {
   return (
@@ -21,6 +23,8 @@ function App() {
         <Route path="/loading2" element = {<Loading2/>}/>
         <Route path="/selectphoto" element = {<SelectPhoto/>} />
         <Route path="/decophoto" element = {<DecoPhoto/>} />
+        <Route path="/selectframe" element = {<SelectFrame/>} />
+        <Route path="/completedphoto" element = {<CompletedPhoto/>} />
       </Routes>
     </Suspense>
   )
