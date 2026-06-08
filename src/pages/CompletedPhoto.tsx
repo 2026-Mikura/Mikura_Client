@@ -1,13 +1,58 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
+import QRCode from "qrcode";
 import bg from "../assets/basicBg.png";
 import FullScreenBackground from "../components/FullScreenBackground";
 import { ManitoText, MulmaruText } from "../components/PikuraText";
 
+// Next.js 백엔드 서버 주소 (로컬: http://localhost:3000, 배포 후: https://your-domain.com)
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+
 function CompletedPhoto() {
   const navigate = useNavigate();
   const completedPhoto = useMemo(() => sessionStorage.getItem("mikuraFramedPhoto"), []);
+
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrError, setQrError] = useState(false);
+  const uploadedIdRef = useRef<string | null>(null);
+
+  // 페이지 진입 시 사진 업로드 → QR 코드 생성
+  useEffect(() => {
+    if (!completedPhoto) return;
+
+    let cancelled = false;
+
+    async function uploadAndGenerateQr() {
+      try {
+        const res = await fetch(`${API_BASE}/api/photos/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageData: completedPhoto }),
+        });
+
+        if (!res.ok) throw new Error("업로드 실패");
+
+        const { id, downloadUrl } = await res.json();
+        if (cancelled) return;
+
+        uploadedIdRef.current = id;
+
+        const qr = await QRCode.toDataURL(downloadUrl, {
+          width: 256,
+          margin: 1,
+          color: { dark: "#4b3f45", light: "#ffffff" },
+        });
+
+        if (!cancelled) setQrDataUrl(qr);
+      } catch {
+        if (!cancelled) setQrError(true);
+      }
+    }
+
+    uploadAndGenerateQr();
+    return () => { cancelled = true; };
+  }, [completedPhoto]);
 
   const handleFinish = () => {
     navigate("/");
@@ -17,7 +62,7 @@ function CompletedPhoto() {
     if (completedPhoto) {
       const photoBookPhoto = await createPhotoBookPhoto(completedPhoto);
       const nextEntry = {
-        id: `photo-book-${Date.now()}`,
+        id: uploadedIdRef.current ?? `photo-book-${Date.now()}`,
         photo: photoBookPhoto,
         memo: "",
         createdAt: new Date().toISOString(),
@@ -61,7 +106,13 @@ function CompletedPhoto() {
           </HandDrawnArrow>
 
           <QrCard>
-            <QrCodePlaceholder />
+            {qrDataUrl ? (
+              <QrImage src={qrDataUrl} alt="다운로드 QR 코드" />
+            ) : qrError ? (
+              <QrErrorText>QR 생성 실패</QrErrorText>
+            ) : (
+              <QrLoadingText>QR 생성 중…</QrLoadingText>
+            )}
           </QrCard>
 
           <ButtonRow>
@@ -106,26 +157,6 @@ function loadImage(src: string) {
     image.src = src;
   });
 }
-
-function QrCodePlaceholder() {
-  return (
-    <QrGrid aria-label="QR 코드 자리">
-      {Array.from({ length: 49 }, (_, index) => (
-        <QrCell key={index} $isDark={QR_PATTERN[index] === "1"} />
-      ))}
-    </QrGrid>
-  );
-}
-
-const QR_PATTERN = [
-  "1111111",
-  "1000101",
-  "1011101",
-  "1010101",
-  "1011101",
-  "1000001",
-  "1111111",
-].join("");
 
 const TitleText = styled(ManitoText)`
   position: absolute;
@@ -225,18 +256,22 @@ const QrCard = styled.div`
   box-shadow: 0 8px 18px rgba(255, 154, 201, 0.26), 0 0 0 1px rgba(255, 255, 255, 0.72);
 `;
 
-const QrGrid = styled.div`
-  display: grid;
-  width: 78%;
-  aspect-ratio: 1 / 1;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  padding: 8px;
-  background: #d9d9d9;
+const QrImage = styled.img`
+  width: 82%;
+  height: 82%;
+  border-radius: 4px;
 `;
 
-const QrCell = styled.span<{ $isDark: boolean }>`
-  background: ${({ $isDark }) => ($isDark ? "#9f9f9f" : "#eeeeee")};
+const QrLoadingText = styled(MulmaruText)`
+  color: #c8a8b8;
+  font-size: 13px;
+  text-align: center;
+`;
+
+const QrErrorText = styled(MulmaruText)`
+  color: #e07090;
+  font-size: 13px;
+  text-align: center;
 `;
 
 const ButtonRow = styled.div`
