@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import styled from "styled-components";
 import bg from "../assets/basicBg.png";
 import cameraClipMask from "../assets/cameraClipMask.png";
 import cameraMask from "../assets/cameraMask.png";
 import FullScreenBackground from "../components/FullScreenBackground";
 import { ManitoText, MulmaruText } from "../components/PikuraText";
+import { BeautyFilter } from "../utils/BeautyFilter";
 import Loading from "./Loading";
-import styled from "styled-components";
 
 const TOTAL_PHOTO_COUNT = 6;
 const COUNTDOWN_START = 5;
@@ -17,18 +18,38 @@ const SHUTTER_MOTION_DURATION = 520;
 
 function CameraPage() {
   const navigate = useNavigate();
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const beautyFilterRef = useRef<BeautyFilter | null>(null);
+
   const capturedPhotosRef = useRef<string[]>([]);
   const countdownRef = useRef(COUNTDOWN_START);
   const shutterTimeoutRef = useRef<number | null>(null);
   const navigationTimeoutRef = useRef<number | null>(null);
+
   const [countdown, setCountdown] = useState(COUNTDOWN_START);
   const [capturedCount, setCapturedCount] = useState(1);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isMaskReady, setIsMaskReady] = useState(false);
+  const [isBeautyReady, setIsBeautyReady] = useState(false);
   const [shutterMotionKey, setShutterMotionKey] = useState(0);
   const [isShutterMotionActive, setIsShutterMotionActive] = useState(false);
-  const isReady = isCameraReady && isMaskReady;
+
+  const isReady = isCameraReady && isMaskReady && isBeautyReady;
+
+  useEffect(() => {
+    const filter = new BeautyFilter();
+    beautyFilterRef.current = filter;
+
+    filter
+      .init()
+      .then(() => setIsBeautyReady(true))
+      .catch((error) => {
+        console.error("Failed to init beauty filter", error);
+        setIsBeautyReady(true);
+      });
+  }, []);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -66,6 +87,38 @@ function CameraPage() {
   }, []);
 
   useEffect(() => {
+    let frameId = 0;
+
+    const renderBeauty = () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const beautyFilter = beautyFilterRef.current;
+
+      if (
+        video &&
+        canvas &&
+        beautyFilter &&
+        beautyFilter.isReady &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0
+      ) {
+        if (canvas.width !== CAPTURE_WIDTH) canvas.width = CAPTURE_WIDTH;
+        if (canvas.height !== CAPTURE_HEIGHT) canvas.height = CAPTURE_HEIGHT;
+
+        beautyFilter.process(video, canvas);
+      }
+
+      frameId = window.requestAnimationFrame(renderBeauty);
+    };
+
+    renderBeauty();
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (shutterTimeoutRef.current) {
         window.clearTimeout(shutterTimeoutRef.current);
@@ -91,55 +144,18 @@ function CameraPage() {
   }, []);
 
   const capturePhoto = useCallback(() => {
-    const video = videoRef.current;
+    const canvas = canvasRef.current;
 
     if (
-      !video ||
-      video.videoWidth === 0 ||
-      video.videoHeight === 0 ||
+      !canvas ||
+      canvas.width === 0 ||
+      canvas.height === 0 ||
       capturedPhotosRef.current.length >= TOTAL_PHOTO_COUNT
     ) {
       return;
     }
 
     playShutterMotion();
-
-    const canvas = document.createElement("canvas");
-    canvas.width = CAPTURE_WIDTH;
-    canvas.height = CAPTURE_HEIGHT;
-
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) {
-      return;
-    }
-
-    const sourceAspect = video.videoWidth / video.videoHeight;
-    const captureAspect = CAPTURE_WIDTH / CAPTURE_HEIGHT;
-    const sourceWidth =
-      sourceAspect > captureAspect
-        ? video.videoHeight * captureAspect
-        : video.videoWidth;
-    const sourceHeight =
-      sourceAspect > captureAspect
-        ? video.videoHeight
-        : video.videoWidth / captureAspect;
-    const sourceX = (video.videoWidth - sourceWidth) / 2;
-    const sourceY = (video.videoHeight - sourceHeight) / 2;
-
-    ctx.translate(CAPTURE_WIDTH, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(
-      video,
-      sourceX,
-      sourceY,
-      sourceWidth,
-      sourceHeight,
-      0,
-      0,
-      CAPTURE_WIDTH,
-      CAPTURE_HEIGHT,
-    );
 
     const photo = canvas.toDataURL("image/jpeg", 0.85);
     const nextPhotos = [...capturedPhotosRef.current, photo];
@@ -163,19 +179,19 @@ function CameraPage() {
   }, [navigate, playShutterMotion]);
 
   useEffect(() => {
-    if (!isReady) {
-      return;
-    }
+    if (!isReady) return;
 
     const intervalId = window.setInterval(() => {
       if (countdownRef.current <= COUNTDOWN_END) {
         countdownRef.current = COUNTDOWN_START;
         setCountdown(COUNTDOWN_START);
+
         try {
           capturePhoto();
         } catch (error) {
           console.error("Failed to capture photo", error);
         }
+
         return;
       }
 
@@ -194,6 +210,7 @@ function CameraPage() {
       <GuideText $isReady={isReady}>
         귀엽고 깜찍하게 포즈를 취해보세요 &gt;.&lt;
       </GuideText>
+
       <CameraFrame $isReady={isReady}>
         <VideoMask $mask={cameraClipMask}>
           <CameraVideo
@@ -203,6 +220,8 @@ function CameraPage() {
             muted
             onCanPlay={() => setIsCameraReady(true)}
           />
+
+          <BeautyCanvas ref={canvasRef} />
         </VideoMask>
 
         <MaskImage
@@ -210,16 +229,19 @@ function CameraPage() {
           alt=""
           onLoad={() => setIsMaskReady(true)}
         />
+
         <CountdownText>{countdown}</CountdownText>
         <PhotoProgressText>
           {capturedCount}/{TOTAL_PHOTO_COUNT}
         </PhotoProgressText>
       </CameraFrame>
+
       <ShutterMotion
         key={shutterMotionKey}
         $isActive={isShutterMotionActive}
         aria-hidden="true"
       />
+
       {!isReady && <Loading />}
     </FullScreenBackground>
   );
@@ -252,7 +274,6 @@ const CameraFrame = styled.div<{ $isReady: boolean }>`
       transform: translateX(-50%) scale(1);
     }
   }
-
 `;
 
 const VideoMask = styled.div<{ $mask: string }>`
@@ -278,7 +299,18 @@ const CameraVideo = styled.video`
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1);
+  opacity: 0;
+  pointer-events: none;
+`;
+
+const BeautyCanvas = styled.canvas`
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
 `;
 
 const CountdownText = styled(MulmaruText)`
