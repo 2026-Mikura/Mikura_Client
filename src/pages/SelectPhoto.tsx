@@ -13,30 +13,30 @@ const TOTAL_PHOTO_COUNT = 6;
 export default function SelectPhoto() {
   const navigate = useNavigate();
   const photos = useMemo(() => getStoredPhotos(), []);
-  const [selectedIndices, setSelectedIndices] = useState<(number | null)[]>(
+  const [selectedPhotos, setSelectedPhotos] = useState<(string | null)[]>(
     Array.from({ length: TOTAL_SLOT_COUNT }, () => null),
   );
-  const selectedSlotIndex = selectedIndices.findIndex((idx) => idx === null);
-  const isSelectionComplete = selectedIndices.every((idx) => idx !== null);
+  const selectedSlotIndex = selectedPhotos.findIndex((photo) => !photo);
+  const isSelectionComplete = selectedPhotos.every(isPhotoDataUrl);
   const currentSlotNumber =
     selectedSlotIndex === -1 ? TOTAL_SLOT_COUNT : selectedSlotIndex + 1;
 
-  function handleSelectPhoto(photoIndex: number) {
-    setSelectedIndices((currentIndices) => {
-      const nextIndices = [...currentIndices];
-      const slotIndex = nextIndices.indexOf(photoIndex);
+  function handleSelectPhoto(photo: string) {
+    setSelectedPhotos((currentPhotos) => {
+      const nextPhotos = [...currentPhotos];
+      const selectedIndex = nextPhotos.indexOf(photo);
 
-      if (slotIndex !== -1) {
-        nextIndices[slotIndex] = null;
-        return nextIndices;
+      if (selectedIndex !== -1) {
+        nextPhotos[selectedIndex] = null;
+        return nextPhotos;
       }
 
-      const targetSlot = nextIndices.findIndex((idx) => idx === null);
+      const targetIndex = nextPhotos.findIndex((currentPhoto) => !currentPhoto);
       const nextSlotIndex =
-        targetSlot === -1 ? TOTAL_SLOT_COUNT - 1 : targetSlot;
+        targetIndex === -1 ? TOTAL_SLOT_COUNT - 1 : targetIndex;
 
-      nextIndices[nextSlotIndex] = photoIndex;
-      return nextIndices;
+      nextPhotos[nextSlotIndex] = photo;
+      return nextPhotos;
     });
   }
 
@@ -46,10 +46,7 @@ export default function SelectPhoto() {
       return;
     }
 
-    const confirmedPhotos = selectedIndices
-      .filter((idx): idx is number => idx !== null)
-      .map((idx) => photos[idx])
-      .filter(isPhotoDataUrl);
+    const confirmedPhotos = selectedPhotos.filter(isPhotoDataUrl);
     sessionStorage.setItem("mikuraSelectedPhotos", JSON.stringify(confirmedPhotos));
     navigate("/decophoto");
   }
@@ -61,10 +58,10 @@ export default function SelectPhoto() {
       <SelectionLayout>
         <FramePreview>
           <FramePhotoGrid>
-            {selectedIndices.map((photoIndex, slotIndex) => (
-              <FramePhotoSlot key={slotIndex}>
-                {photoIndex !== null && photos[photoIndex] ? (
-                  <FramePhoto src={photos[photoIndex]} alt={`선택한 사진 ${slotIndex + 1}`} />
+            {selectedPhotos.map((photo, index) => (
+              <FramePhotoSlot key={index}>
+                {photo ? (
+                  <FramePhoto src={photo} alt={`선택한 사진 ${index + 1}`} />
                 ) : null}
               </FramePhotoSlot>
             ))}
@@ -75,8 +72,8 @@ export default function SelectPhoto() {
         <ThumbnailGrid>
           {Array.from({ length: TOTAL_PHOTO_COUNT }, (_, index) => {
             const photo = photos[index];
-            const slotIndex = selectedIndices.indexOf(index);
-            const isUsed = slotIndex !== -1;
+            const selectedIndex = photo ? selectedPhotos.indexOf(photo) : -1;
+            const isUsed = selectedIndex !== -1;
 
             return (
               <ThumbnailButton
@@ -85,7 +82,7 @@ export default function SelectPhoto() {
                 $hasPhoto={Boolean(photo)}
                 $isSelected={isUsed}
                 disabled={!photo}
-                onClick={() => photo && handleSelectPhoto(index)}
+                onClick={() => photo && handleSelectPhoto(photo)}
               >
                 {photo ? (
                   <>
@@ -95,7 +92,7 @@ export default function SelectPhoto() {
                     />
                     {isUsed && (
                       <SelectedOverlay>
-                        <SelectedNumber>{slotIndex + 1}</SelectedNumber>
+                        <SelectedNumber>{selectedIndex + 1}</SelectedNumber>
                       </SelectedOverlay>
                     )}
                   </>
