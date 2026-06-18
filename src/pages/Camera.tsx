@@ -277,14 +277,6 @@ function CameraPage() {
               clipPath="url(#beauty-fill)"
               filter="url(#beauty-glow)"
             />
-            {/* 썸 원 (크기도 값에 따라 증가) */}
-            <circle
-              cx="35"
-              cy={220 * (1 - beautyIntensity / 100)}
-              r={10 + 7 * (beautyIntensity / 100)}
-              fill="white"
-              filter="url(#beauty-glow)"
-            />
           </svg>
           <BeautyHiddenInput
             type="range"
