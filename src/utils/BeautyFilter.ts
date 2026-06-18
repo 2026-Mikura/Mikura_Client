@@ -312,7 +312,7 @@ export class BeautyFilter {
     this.landmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
       runningMode: "VIDEO",
-      numFaces: 1,
+      numFaces: 4,
     });
     this.fxCanvas = fx.canvas();
     this.sourceCanvas = document.createElement("canvas");
@@ -366,65 +366,52 @@ export class BeautyFilter {
     const texture = fxCanvas.texture(sourceCanvas);
     fxCanvas.draw(texture);
 
+    const avgPoint = (p: typeof result.faceLandmarks[0], indices: number[]): Point => {
+      let x = 0, y = 0;
+      indices.forEach((idx) => {
+        x += p[idx].x * cw;
+        y += p[idx].y * ch;
+      });
+      return { x: x / indices.length, y: y / indices.length };
+    };
+
     if (result.faceLandmarks.length > 0) {
-      const p = result.faceLandmarks[0];
-
-      const avgPoint = (indices: number[]): Point => {
-        let x = 0,
-          y = 0;
-        indices.forEach((idx) => {
-          x += p[idx].x * cw;
-          y += p[idx].y * ch;
-        });
-        return { x: x / indices.length, y: y / indices.length };
-      };
-
-      const faceWidth = Math.abs(p[234].x - p[454].x) * cw;
-
-      const leftEye = avgPoint([33, 133, 159, 145, 160, 158, 153, 144]);
-      const rightEye = avgPoint([362, 263, 386, 374, 387, 385, 380, 373]);
-
-      fxCanvas
-        .bulgePinch(leftEye.x, leftEye.y, faceWidth * 0.18, 0.28)
-        .bulgePinch(rightEye.x, rightEye.y, faceWidth * 0.18, 0.28)
-        .update();
+      // 3. glfx로 모든 얼굴 눈 확대 한 번에 처리
+      let fxChain = fxCanvas.draw(texture);
+      result.faceLandmarks.forEach((p) => {
+        const faceWidth = Math.abs(p[234].x - p[454].x) * cw;
+        const leftEye = avgPoint(p, [33, 133, 159, 145, 160, 158, 153, 144]);
+        const rightEye = avgPoint(p, [362, 263, 386, 374, 387, 385, 380, 373]);
+        fxChain = fxChain
+          .bulgePinch(leftEye.x, leftEye.y, faceWidth * 0.18, 0.28)
+          .bulgePinch(rightEye.x, rightEye.y, faceWidth * 0.18, 0.28);
+      });
+      fxChain.update();
 
       outCtx.clearRect(0, 0, cw, ch);
       outCtx.drawImage(fxCanvas, 0, 0, cw, ch);
 
-      const leftNose = avgPoint([114, 98, 129]);
-      const rightNose = avgPoint([343, 327, 358]);
-      const noseCenter = avgPoint([1, 2, 168]);
+      // 4-6. 각 얼굴마다 코 슬림 → 얼굴형 슬림 → 코 단축 순으로 적용
+      result.faceLandmarks.forEach((p) => {
+        const faceWidth = Math.abs(p[234].x - p[454].x) * cw;
+        const faceCenter = avgPoint(p, [1, 168, 197]);
 
-      // 4. 코 슬림
-      noseSlimWarp(
-        outCtx,
-        cw,
-        ch,
-        leftNose,
-        rightNose,
-        noseCenter,
-        faceWidth,
-        0.12,
-      );
+        const leftNose = avgPoint(p, [114, 98, 129]);
+        const rightNose = avgPoint(p, [343, 327, 358]);
+        const noseCenter = avgPoint(p, [1, 2, 168]);
+        noseSlimWarp(outCtx, cw, ch, leftNose, rightNose, noseCenter, faceWidth, 0.12);
 
-      const landmarks = p.map((point) => ({
-        x: point.x * cw,
-        y: point.y * ch,
-      }));
-      const faceCenter = avgPoint([1, 168, 197]);
+        const landmarks = p.map((point) => ({ x: point.x * cw, y: point.y * ch }));
+        faceSlimWarp(outCtx, cw, ch, landmarks, faceCenter, faceWidth, 0.1, 0.07);
 
-      // 5. 얼굴형/턱 슬림 (Delaunay 삼각분할)
-      faceSlimWarp(outCtx, cw, ch, landmarks, faceCenter, faceWidth, 0.1, 0.07);
-
-      // 6. 코 단축
-      const underEye = avgPoint([145, 159, 374, 386]);
-      const noseTip = { x: p[1].x * cw, y: p[1].y * ch };
-      const midFaceCenter = {
-        x: noseTip.x,
-        y: underEye.y + (noseTip.y - underEye.y) * 0.65,
-      };
-      midFaceWarp(outCtx, cw, ch, midFaceCenter, faceWidth, 0.15);
+        const underEye = avgPoint(p, [145, 159, 374, 386]);
+        const noseTip = { x: p[1].x * cw, y: p[1].y * ch };
+        const midFaceCenter = {
+          x: noseTip.x,
+          y: underEye.y + (noseTip.y - underEye.y) * 0.65,
+        };
+        midFaceWarp(outCtx, cw, ch, midFaceCenter, faceWidth, 0.15);
+      });
     } else {
       fxCanvas.update();
       outCtx.clearRect(0, 0, cw, ch);
