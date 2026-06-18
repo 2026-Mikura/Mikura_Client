@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getStroke } from "perfect-freehand";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
@@ -1033,7 +1033,8 @@ export default function DecoPhoto() {
     return () => window.clearInterval(timerId);
   }, [finishDecoration]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedStickerId(null);
     stickerEditRef.current = null;
     drawingRef.current = false;

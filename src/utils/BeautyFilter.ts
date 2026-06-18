@@ -300,7 +300,7 @@ const faceSlimWarp = (
 export class BeautyFilter {
   private landmarker: FaceLandmarker | null = null;
   private _ready = false;
-  private fxCanvas: any = null;
+  private fxCanvas: import("glfx").FxCanvas | null = null;
   private sourceCanvas: HTMLCanvasElement | null = null;
 
   get isReady() {

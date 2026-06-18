@@ -48,10 +48,6 @@ function PhotoBook() {
   const canGoNext = safePageIndex < pages.length - 1;
 
   useEffect(() => {
-    if (pageIndex !== safePageIndex) setPageIndex(safePageIndex);
-  }, [pageIndex, safePageIndex]);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function loadEntries() {
