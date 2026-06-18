@@ -884,6 +884,9 @@ export default function DecoPhoto() {
     Array.from({ length: PHOTO_SLOT_COUNT }, createEmptyPhotoDecoration),
   );
   const [selectedStickerId, setSelectedStickerId] = useState<number | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<string[]>(() =>
+    Array.from({ length: PHOTO_SLOT_COUNT }, (_, i) => photos[i] ?? ""),
+  );
   const activePhoto = photos[activePhotoIndex];
   const activeStickerGroup = STICKER_GROUPS[activeStickerGroupIndex];
   const activeDecoration = photoDecorations[activePhotoIndex] ?? createEmptyPhotoDecoration();
@@ -1021,6 +1024,38 @@ export default function DecoPhoto() {
     drawingRef.current = false;
     currentStrokeRef.current = null;
   }, [activePhotoIndex]);
+
+  useEffect(() => {
+    const photo = photos[activePhotoIndex];
+    const decoration = photoDecorations[activePhotoIndex];
+    if (!photo) return;
+
+    let cancelled = false;
+
+    const timer = window.setTimeout(async () => {
+      const rect = canvasWrapRef.current?.querySelector("[data-photo-layer]")?.getBoundingClientRect();
+      const width = rect?.width ?? 840;
+      const height = rect?.height ?? 500;
+
+      try {
+        const url = await renderDecoratedPhoto(photo, decoration ?? createEmptyPhotoDecoration(), width, height, 1, 0.82);
+        if (!cancelled) {
+          setPreviewUrls((prev) => {
+            const next = [...prev];
+            next[activePhotoIndex] = url;
+            return next;
+          });
+        }
+      } catch {
+        // 실패 시 기존 미리보기 유지
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [photoDecorations, activePhotoIndex, photos]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -1330,7 +1365,7 @@ export default function DecoPhoto() {
               $isActive={index === activePhotoIndex}
               onClick={() => setActivePhotoIndex(index)}
             >
-              {photo ? <PhotoSlotImage src={photo} alt={`선택 사진 ${index + 1}`} draggable={false} onDragStart={(event) => event.preventDefault()} /> : null}
+              {photo ? <PhotoSlotImage src={previewUrls[index] || photo} alt={`선택 사진 ${index + 1}`} draggable={false} onDragStart={(event) => event.preventDefault()} /> : null}
             </PhotoSlot>
           );
         })}
