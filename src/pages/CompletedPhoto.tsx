@@ -170,11 +170,10 @@ const TitleText = styled(ManitoText)`
   z-index: 3;
   margin: 0;
   transform: translateX(-50%);
-  color: #ff87ba;
   text-shadow: 0 0 9.2px #f6a8dc;
   -webkit-text-stroke-width: 6px;
   -webkit-text-stroke-color: #f175a5;
-  font-size: clamp(28px, 3.2vw, 45px);
+  font-size: 50px;
   white-space: nowrap;
 `;
 
@@ -289,29 +288,33 @@ const ButtonRow = styled.div`
 
 const ActionButton = styled.button`
   min-width: 120px;
-  min-height: 52px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 22px;
-  padding: 0 24px;
-  background: linear-gradient(180deg, #fff4fc 0%, #ffe7f8 100%);
-  color: #ff9ccc;
-  font-family: "Mulmaru", "Mulmaru Mono", sans-serif;
-  font-size: 18px;
+  min-height: 60px;
+  border: 0;
+  border-radius: 26px;
+  padding: 0 28px;
+  background: #fff;
+  color: #ff87ba;
+  font-family: "Hakgyoansim_ManitoR", "Hakgyoansim Manito R", sans-serif;
+  font-size: 26px;
+  font-weight: 400;
   line-height: 1;
+  paint-order: stroke fill;
+  -webkit-text-stroke-width: 4px;
+  -webkit-text-stroke-color: #fff;
   box-shadow:
-    0 0 4.9px rgba(0, 0, 0, 0.09),
-    inset -3px -5px 6px rgba(201, 122, 165, 0.25),
-    inset 0 2px 8px rgba(255, 255, 255, 0.5);
+    0 4px 0 rgba(255, 180, 216, 0.35),
+    0 2px 12px rgba(255, 160, 210, 0.18);
   cursor: pointer;
   transition: filter 0.2s ease, transform 0.2s ease;
 
   &:hover {
-    filter: brightness(1.05);
-    transform: scale(1.05);
+    filter: brightness(1.04);
+    transform: scale(1.04);
   }
 
   &:active {
-    transform: scale(0.95);
+    transform: scale(0.96);
+    box-shadow: 0 2px 0 rgba(255, 180, 216, 0.35);
   }
 
   &:disabled {

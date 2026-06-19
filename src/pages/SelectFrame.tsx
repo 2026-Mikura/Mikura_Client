@@ -386,10 +386,9 @@ const GuideText = styled(ManitoText)`
   z-index: 3;
   width: min(90%, 920px);
   transform: translateX(-50%);
-  color: #ff87ba;
   text-shadow: 0 0 9.2px #f6a8dc;
   -webkit-text-stroke-width: 6px;
-  -webkit-text-stroke-color: #fff;
+  -webkit-text-stroke-color: #f175a5;
   font-size: 50px;
   text-align: center;
 `;
