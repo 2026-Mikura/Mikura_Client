@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import styled from "styled-components";
 import bg from "../assets/basicBg.png";
+import gayPng from "../assets/gay.png";
 import cameraClipMask from "../assets/cameraClipMask.png";
 import cameraMask from "../assets/cameraMask.png";
 import FullScreenBackground from "../components/FullScreenBackground";
 import { ManitoText, MulmaruText } from "../components/PikuraText";
-import Loading from "./Loading";
-import styled from "styled-components";
 import { BeautyFilter } from "../utils/BeautyFilter";
+import Loading from "./Loading";
 
 const TOTAL_PHOTO_COUNT = 6;
 const COUNTDOWN_START = 5;
@@ -18,21 +19,74 @@ const SHUTTER_MOTION_DURATION = 520;
 
 function CameraPage() {
   const navigate = useNavigate();
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const beautyFilterRef = useRef<BeautyFilter | null>(null);
-  const animFrameRef = useRef<number | null>(null);
+
+
   const capturedPhotosRef = useRef<string[]>([]);
   const countdownRef = useRef(COUNTDOWN_START);
   const shutterTimeoutRef = useRef<number | null>(null);
   const navigationTimeoutRef = useRef<number | null>(null);
+
   const [countdown, setCountdown] = useState(COUNTDOWN_START);
   const [capturedCount, setCapturedCount] = useState(1);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isMaskReady, setIsMaskReady] = useState(false);
+  const [isBeautyReady, setIsBeautyReady] = useState(false);
   const [shutterMotionKey, setShutterMotionKey] = useState(0);
   const [isShutterMotionActive, setIsShutterMotionActive] = useState(false);
-  const isReady = isCameraReady && isMaskReady;
+  const [beautyIntensity, setBeautyIntensity] = useState(100);
+  const beautyIntensityRef = useRef(1);
+  const isDraggingGaugeRef = useRef(false);
+  const gaugeRef = useRef<SVGSVGElement | null>(null);
+
+  const isReady = isCameraReady && isMaskReady && isBeautyReady;
+
+  function updateGaugeFromPointer(clientX: number, clientY: number) {
+    const svg = gaugeRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const dx = clientX - (rect.left + rect.width / 2);
+    const dy = clientY - (rect.top + rect.height / 2);
+    let angle = Math.atan2(dx, -dy) * (180 / Math.PI);
+    if (angle < 0) angle += 360;
+    const val = Math.round(angle / 360 * 100);
+    setBeautyIntensity(val);
+    beautyIntensityRef.current = val / 100;
+  }
+
+  function handleGaugePointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    isDraggingGaugeRef.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    updateGaugeFromPointer(e.clientX, e.clientY);
+  }
+
+  function handleGaugePointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (!isDraggingGaugeRef.current) return;
+    updateGaugeFromPointer(e.clientX, e.clientY);
+  }
+
+  function handleGaugePointerUp(e: React.PointerEvent<SVGSVGElement>) {
+    isDraggingGaugeRef.current = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }
+
+  useEffect(() => {
+    const filter = new BeautyFilter();
+    beautyFilterRef.current = filter;
+
+    filter
+      .init()
+      .then(() => setIsBeautyReady(true))
+      .catch((error) => {
+        console.error("Failed to init beauty filter", error);
+        setIsBeautyReady(true);
+      });
+  }, []);
 
   // 카메라 스트림 시작 + BeautyFilter 초기화
   useEffect(() => {
@@ -41,8 +95,22 @@ function CameraPage() {
 
     async function startCamera() {
       try {
+        // 외부 웹캠 우선 선택: 연결된 카메라 목록에서 내장 카메라 이외의 장치를 찾음
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((d) => d.kind === "videoinput");
+        // 내장 카메라는 보통 label에 "integrated" / "facetime" / "isight" 포함
+        const externalCam = videoDevices.find(
+          (d) =>
+            !/(integrated|facetime|isight|built-?in)/i.test(d.label) &&
+            d.deviceId !== "",
+        );
+
+        const videoConstraint: MediaTrackConstraints = externalCam
+          ? { deviceId: { exact: externalCam.deviceId } }
+          : { facingMode: "user" };
+
         const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: videoConstraint,
           audio: false,
         });
 
@@ -77,35 +145,35 @@ function CameraPage() {
     };
   }, []);
 
-  // BeautyFilter 렌더링 루프
   useEffect(() => {
-    const loop = () => {
+    let frameId = 0;
+
+    const renderCamera = () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const filter = beautyFilterRef.current;
+      const beautyFilter = beautyFilterRef.current;
 
-      if (video && canvas) {
-        if (filter?.isReady) {
-          filter.process(video, canvas);
-        } else if (video.readyState >= 2 && video.videoWidth > 0) {
-          // BeautyFilter 로딩 전 fallback: 미러 영상만 표시
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.save();
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            ctx.restore();
-          }
-        }
+      if (
+        video &&
+        canvas &&
+        beautyFilter &&
+        beautyFilter.isReady &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0
+      ) {
+        if (canvas.width !== CAPTURE_WIDTH) canvas.width = CAPTURE_WIDTH;
+        if (canvas.height !== CAPTURE_HEIGHT) canvas.height = CAPTURE_HEIGHT;
+
+        beautyFilter.process(video, canvas, beautyIntensityRef.current);
       }
 
-      animFrameRef.current = requestAnimationFrame(loop);
+      frameId = window.requestAnimationFrame(renderCamera);
     };
 
-    animFrameRef.current = requestAnimationFrame(loop);
+    renderCamera();
+
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      window.cancelAnimationFrame(frameId);
     };
   }, []);
 
@@ -135,60 +203,18 @@ function CameraPage() {
   }, []);
 
   const capturePhoto = useCallback(() => {
-    const video = videoRef.current;
+    const canvas = canvasRef.current;
 
     if (
-      !video ||
-      video.videoWidth === 0 ||
-      video.videoHeight === 0 ||
+      !canvas ||
+      canvas.width === 0 ||
+      canvas.height === 0 ||
       capturedPhotosRef.current.length >= TOTAL_PHOTO_COUNT
     ) {
       return;
     }
 
     playShutterMotion();
-
-    const canvas = document.createElement("canvas");
-    canvas.width = CAPTURE_WIDTH;
-    canvas.height = CAPTURE_HEIGHT;
-
-    const filter = beautyFilterRef.current;
-    if (filter?.isReady) {
-      filter.capture(video, canvas);
-    } else {
-      const ctx = canvas.getContext("2d");
-
-      if (!ctx) {
-        return;
-      }
-
-      const sourceAspect = video.videoWidth / video.videoHeight;
-      const captureAspect = CAPTURE_WIDTH / CAPTURE_HEIGHT;
-      const sourceWidth =
-        sourceAspect > captureAspect
-          ? video.videoHeight * captureAspect
-          : video.videoWidth;
-      const sourceHeight =
-        sourceAspect > captureAspect
-          ? video.videoHeight
-          : video.videoWidth / captureAspect;
-      const sourceX = (video.videoWidth - sourceWidth) / 2;
-      const sourceY = (video.videoHeight - sourceHeight) / 2;
-
-      ctx.translate(CAPTURE_WIDTH, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(
-        video,
-        sourceX,
-        sourceY,
-        sourceWidth,
-        sourceHeight,
-        0,
-        0,
-        CAPTURE_WIDTH,
-        CAPTURE_HEIGHT,
-      );
-    }
 
     const photo = canvas.toDataURL("image/jpeg", 0.85);
     const nextPhotos = [...capturedPhotosRef.current, photo];
@@ -212,19 +238,19 @@ function CameraPage() {
   }, [navigate, playShutterMotion]);
 
   useEffect(() => {
-    if (!isReady) {
-      return;
-    }
+    if (!isReady) return;
 
     const intervalId = window.setInterval(() => {
       if (countdownRef.current <= COUNTDOWN_END) {
         countdownRef.current = COUNTDOWN_START;
         setCountdown(COUNTDOWN_START);
+
         try {
           capturePhoto();
         } catch (error) {
           console.error("Failed to capture photo", error);
         }
+
         return;
       }
 
@@ -243,6 +269,7 @@ function CameraPage() {
       <GuideText $isReady={isReady}>
         귀엽고 깜찍하게 포즈를 취해보세요 &gt;.&lt;
       </GuideText>
+
       <CameraFrame $isReady={isReady}>
         <VideoMask $mask={cameraClipMask}>
           {/* 스트림 소스용 video: 화면에는 표시 안 함 */}
@@ -253,12 +280,8 @@ function CameraPage() {
             muted
             onCanPlay={() => setIsCameraReady(true)}
           />
-          {/* BeautyFilter가 렌더링하는 canvas */}
-          <CameraCanvas
-            ref={canvasRef}
-            width={CAPTURE_WIDTH}
-            height={CAPTURE_HEIGHT}
-          />
+
+          <BeautyCanvas ref={canvasRef} />
         </VideoMask>
 
         <MaskImage
@@ -266,16 +289,78 @@ function CameraPage() {
           alt=""
           onLoad={() => setIsMaskReady(true)}
         />
+
         <CountdownText>{countdown}</CountdownText>
         <PhotoProgressText>
           {capturedCount}/{TOTAL_PHOTO_COUNT}
         </PhotoProgressText>
       </CameraFrame>
+
+      <BeautySliderWrap $isReady={isReady}>
+        <BeautySliderLabel>보정</BeautySliderLabel>
+        <BeautySliderBox>
+          <svg
+            ref={gaugeRef}
+            width="130" height="130" viewBox="0 0 130 130"
+            style={{ display: "block", cursor: "pointer", touchAction: "none" }}
+            onPointerDown={handleGaugePointerDown}
+            onPointerMove={handleGaugePointerMove}
+            onPointerUp={handleGaugePointerUp}
+            onPointerCancel={handleGaugePointerUp}
+          >
+            <defs>
+              <filter id="beauty-glow" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="5" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+            {/* 투명 원 (터치 영역 확장) */}
+            <circle cx="65" cy="65" r="65" fill="transparent" />
+            {/* 배경 링 */}
+            <circle
+              cx="65" cy="65" r="52"
+              fill="none"
+              stroke="rgba(255,255,255,0.22)"
+              strokeWidth="11"
+              strokeLinecap="round"
+            />
+            {/* 진행 링 */}
+            <circle
+              cx="65" cy="65" r="52"
+              fill="none"
+              stroke="rgba(255,255,255,0.95)"
+              strokeWidth="11"
+              strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * 52}
+              strokeDashoffset={2 * Math.PI * 52 * (1 - beautyIntensity / 100)}
+              transform="rotate(-90 65 65)"
+              filter="url(#beauty-glow)"
+            />
+            {/* 현재 위치 핸들 */}
+            {beautyIntensity > 0 && (
+              <circle
+                cx={65 + 52 * Math.cos((-Math.PI / 2) + (beautyIntensity / 100) * 2 * Math.PI)}
+                cy={65 + 52 * Math.sin((-Math.PI / 2) + (beautyIntensity / 100) * 2 * Math.PI)}
+                r="9"
+                fill="white"
+                filter="url(#beauty-glow)"
+              />
+            )}
+          </svg>
+          <BeautyKitty src={gayPng} alt="보정" />
+        </BeautySliderBox>
+        <BeautySliderValue>{beautyIntensity}%</BeautySliderValue>
+      </BeautySliderWrap>
+
       <ShutterMotion
         key={shutterMotionKey}
         $isActive={isShutterMotionActive}
         aria-hidden="true"
       />
+
       {!isReady && <Loading />}
     </FullScreenBackground>
   );
@@ -308,7 +393,6 @@ const CameraFrame = styled.div<{ $isReady: boolean }>`
       transform: translateX(-50%) scale(1);
     }
   }
-
 `;
 
 const VideoMask = styled.div<{ $mask: string }>`
@@ -341,6 +425,19 @@ const CameraCanvas = styled.canvas`
   inset: 0;
   width: 100%;
   height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+`;
+
+const BeautyCanvas = styled.canvas`
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
 `;
 
 const CountdownText = styled(MulmaruText)`
@@ -452,6 +549,56 @@ const GuideText = styled(ManitoText)<{ $isReady: boolean }>`
   font-size: 60px;
   opacity: ${({ $isReady }) => ($isReady ? 1 : 0)};
 `;
+
+const BeautySliderWrap = styled.div<{ $isReady: boolean }>`
+  position: absolute;
+  top: 50%;
+  right: 4%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transform: translateY(-50%);
+  opacity: ${({ $isReady }) => ($isReady ? 1 : 0)};
+  transition: opacity 300ms ease;
+`;
+
+const BeautySliderLabel = styled(MulmaruText)`
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 17px;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.9),
+    0 0 18px rgba(255, 200, 230, 0.6);
+  white-space: nowrap;
+`;
+
+const BeautySliderValue = styled(MulmaruText)`
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  text-shadow:
+    0 0 6px rgba(255, 255, 255, 0.8),
+    0 0 14px rgba(255, 200, 230, 0.5);
+`;
+
+const BeautySliderBox = styled.div`
+  position: relative;
+  width: 130px;
+  height: 130px;
+`;
+
+const BeautyKitty = styled.img`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.7));
+`;
+
 
 const MaskImage = styled.img`
   position: absolute;

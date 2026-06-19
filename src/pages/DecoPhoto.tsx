@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getStroke } from "perfect-freehand";
 import { useNavigate } from "react-router-dom";
 import styled from "styled-components";
@@ -140,15 +140,15 @@ const STICKER_GROUPS = [
   },
 ] satisfies StickerGroup[];
 const BRUSH_STYLES = [
-  { id: "basic", label: "기본 펜", icon: brush1, width: 8.2, texture: "solid", glow: 0 },
-  { id: "neon", label: "네온 글로우 펜", icon: brush2, width: 6.2, texture: "neon", glow: 4.5 },
-  { id: "glitter", label: "글리터 펜", icon: brush3, width: 6.8, texture: "glitter", glow: 2.2 },
-  { id: "texture", label: "질감 브러쉬 펜", icon: brush4, width: 7.2, texture: "texture", glow: 0 },
-  { id: "crayon", label: "크레용 펜", icon: brush5, width: 8.8, texture: "crayon", glow: 0 },
-  { id: "pencil", label: "연필 질감 펜", icon: brush6, width: 4.4, texture: "pencil", glow: 0 },
-  { id: "marker", label: "부드러운 형광펜", icon: brush7, width: 10.2, texture: "marker", glow: 1.4 },
-  { id: "dash", label: "대시 펜", icon: brush8, width: 5.4, texture: "dash", glow: 0 },
-  { id: "doodle", label: "얇은 낙서펜", icon: brush9, width: 2.2, texture: "doodle", glow: 0 },
+  { id: "basic", label: "기본 펜", icon: brush1, width: 3.5, texture: "solid", glow: 0 },
+  { id: "neon", label: "네온 글로우 펜", icon: brush2, width: 2.8, texture: "neon", glow: 4.5 },
+  { id: "glitter", label: "글리터 펜", icon: brush3, width: 3.0, texture: "glitter", glow: 2.2 },
+  { id: "texture", label: "질감 브러쉬 펜", icon: brush4, width: 3.2, texture: "texture", glow: 0 },
+  { id: "crayon", label: "크레용 펜", icon: brush5, width: 4.0, texture: "crayon", glow: 0 },
+  { id: "pencil", label: "연필 질감 펜", icon: brush6, width: 2.0, texture: "pencil", glow: 0 },
+  { id: "marker", label: "부드러운 형광펜", icon: brush7, width: 4.5, texture: "marker", glow: 1.4 },
+  { id: "dash", label: "대시 펜", icon: brush8, width: 2.4, texture: "dash", glow: 0 },
+  { id: "doodle", label: "얇은 낙서펜", icon: brush9, width: 1.0, texture: "doodle", glow: 0 },
 ] as const;
 type BrushStyle = (typeof BRUSH_STYLES)[number]["id"];
 type BrushTexture = (typeof BRUSH_STYLES)[number]["texture"];
@@ -292,14 +292,29 @@ function getInitialImageStickerBox(fileName: string, size: StickerSize) {
   return { width: baseSize * imageScale, height: baseSize * imageScale };
 }
 
-function getInitialTextStickerBox(sticker: string, size: StickerSize) {
+function measureStickerTextWidth(text: string, fontFamily: string, fontSize: number): number {
+  try {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 0;
+    ctx.font = `500 ${fontSize}px ${fontFamily}`;
+    const lines = text.split("\n");
+    return Math.max(...lines.map((line) => ctx.measureText(line.replace(/\t/g, "    ")).width));
+  } catch {
+    return 0;
+  }
+}
+
+function getInitialTextStickerBox(sticker: string, size: StickerSize, fontFamily: string) {
   const baseSize = STICKER_INITIAL_BOX_SIZE[size];
   const lineCount = sticker.split("\n").length;
-  const longestLine = sticker.split("\n").reduce((longest, line) => Math.max(longest, line.length), 1);
+  const height = Math.max(baseSize * 0.34, lineCount * baseSize * 0.34);
+  const fontSize = Math.max(10, height * 0.72);
+  const measured = measureStickerTextWidth(sticker, fontFamily, fontSize);
 
   return {
-    width: Math.max(baseSize * 0.7, longestLine * baseSize * 0.24),
-    height: Math.max(baseSize * 0.34, lineCount * baseSize * 0.34),
+    width: measured > 4 ? Math.ceil(measured) + 8 : Math.max(baseSize * 0.5, lineCount > 1 ? baseSize * 0.8 : baseSize * 0.5),
+    height,
   };
 }
 
@@ -339,14 +354,14 @@ function getAngle(centerX: number, centerY: number, pointerX: number, pointerY: 
 }
 
 function getToneColor(hue: number, tone: number) {
-  const lightness = tone < 50 ? 8 + tone * 0.84 : 50 + (tone - 50) * 0.92;
+  const lightness = tone < 50 ? tone * 1.0 : 50 + (tone - 50) * 0.92;
   const saturation = tone > 88 ? 100 - (tone - 88) * 5 : 100;
 
   return `hsl(${hue} ${Math.max(0, saturation)}% ${Math.min(96, lightness)}%)`;
 }
 
 function getToneGradient(hue: number) {
-  return `linear-gradient(90deg, #050005 0%, hsl(${hue} 100% 18%) 24%, hsl(${hue} 100% 50%) 55%, hsl(${hue} 100% 76%) 78%, hsl(${hue} 28% 96%) 100%)`;
+  return `linear-gradient(90deg, #000000 0%, hsl(${hue} 100% 18%) 24%, hsl(${hue} 100% 50%) 55%, hsl(${hue} 100% 76%) 78%, hsl(${hue} 28% 96%) 100%)`;
 }
 
 function getBrushConfig(style: BrushStyle) {
@@ -878,12 +893,15 @@ export default function DecoPhoto() {
   const [selectedHue, setSelectedHue] = useState(326);
   const [colorTone, setColorTone] = useState(58);
   const [selectedColor, setSelectedColor] = useState(getToneColor(326, 58));
-  const [brushSize, setBrushSize] = useState(24);
+  const [brushSize, setBrushSize] = useState(6);
   const [brushType, setBrushType] = useState<BrushStyle>("basic");
   const [photoDecorations, setPhotoDecorations] = useState<PhotoDecoration[]>(() =>
     Array.from({ length: PHOTO_SLOT_COUNT }, createEmptyPhotoDecoration),
   );
   const [selectedStickerId, setSelectedStickerId] = useState<number | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<string[]>(() =>
+    Array.from({ length: PHOTO_SLOT_COUNT }, (_, i) => photos[i] ?? ""),
+  );
   const activePhoto = photos[activePhotoIndex];
   const activeStickerGroup = STICKER_GROUPS[activeStickerGroupIndex];
   const activeDecoration = photoDecorations[activePhotoIndex] ?? createEmptyPhotoDecoration();
@@ -1015,12 +1033,45 @@ export default function DecoPhoto() {
     return () => window.clearInterval(timerId);
   }, [finishDecoration]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedStickerId(null);
     stickerEditRef.current = null;
     drawingRef.current = false;
     currentStrokeRef.current = null;
   }, [activePhotoIndex]);
+
+  useEffect(() => {
+    const photo = photos[activePhotoIndex];
+    const decoration = photoDecorations[activePhotoIndex];
+    if (!photo) return;
+
+    let cancelled = false;
+
+    const timer = window.setTimeout(async () => {
+      const rect = canvasWrapRef.current?.querySelector("[data-photo-layer]")?.getBoundingClientRect();
+      const width = rect?.width ?? 840;
+      const height = rect?.height ?? 500;
+
+      try {
+        const url = await renderDecoratedPhoto(photo, decoration ?? createEmptyPhotoDecoration(), width, height, 1, 0.82);
+        if (!cancelled) {
+          setPreviewUrls((prev) => {
+            const next = [...prev];
+            next[activePhotoIndex] = url;
+            return next;
+          });
+        }
+      } catch {
+        // 실패 시 기존 미리보기 유지
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [photoDecorations, activePhotoIndex, photos]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -1165,7 +1216,7 @@ export default function DecoPhoto() {
     const initialBox =
       activeStickerGroup.stickerKind === "image"
         ? getInitialImageStickerBox(stickerFileName, placedStickerSize)
-        : getInitialTextStickerBox(sticker, placedStickerSize);
+        : getInitialTextStickerBox(sticker, placedStickerSize, STICKER_FONT_FAMILY[activeStickerGroup.stickerFont]);
     commitActiveDecorationChange((decoration) => ({
       ...decoration,
       maxStickerZIndex: nextZIndex,
@@ -1330,7 +1381,7 @@ export default function DecoPhoto() {
               $isActive={index === activePhotoIndex}
               onClick={() => setActivePhotoIndex(index)}
             >
-              {photo ? <PhotoSlotImage src={photo} alt={`선택 사진 ${index + 1}`} draggable={false} onDragStart={(event) => event.preventDefault()} /> : null}
+              {photo ? <PhotoSlotImage src={previewUrls[index] || photo} alt={`선택 사진 ${index + 1}`} draggable={false} onDragStart={(event) => event.preventDefault()} /> : null}
             </PhotoSlot>
           );
         })}
@@ -1581,8 +1632,8 @@ export default function DecoPhoto() {
                 <BrushSizeSlider
                   aria-label="브러쉬 굵기"
                   type="range"
-                  min="10"
-                  max="46"
+                  min="2"
+                  max="14"
                   value={brushSize}
                   onChange={(event) => setBrushSize(Number(event.target.value))}
                 />

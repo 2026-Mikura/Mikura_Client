@@ -172,7 +172,14 @@ function SelectFrame() {
       <TimerText>{timerSeconds}</TimerText>
 
       <SelectionLayout>
-        <FramePreview>
+        <FramePreview
+          style={{
+            backgroundColor: selectedFrameStyle.fillColor ?? "transparent",
+            backgroundImage: selectedFrameStyle.fillImage ? `url(${selectedFrameStyle.fillImage})` : "none",
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
+        >
           <FramePhotoLayer>
             {PHOTO_SLOTS.map((slot, index) => {
               const photo = decoratedPhotos[index];
@@ -276,8 +283,14 @@ async function renderFramePhoto(photos: string[], frame: (typeof FRAMES)[number]
   }
 
   ctx.scale(FRAME_EXPORT_SCALE, FRAME_EXPORT_SCALE);
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+  if (frameStyle.fillImage) {
+    const bgImage = await loadImage(frameStyle.fillImage);
+    drawImageCover(ctx, bgImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+  } else {
+    ctx.fillStyle = frameStyle.fillColor ?? "#fff";
+    ctx.fillRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+  }
 
   await Promise.all(
     PHOTO_SLOTS.map(async (slot, index) => {
@@ -373,10 +386,9 @@ const GuideText = styled(ManitoText)`
   z-index: 3;
   width: min(90%, 920px);
   transform: translateX(-50%);
-  color: #ff87ba;
   text-shadow: 0 0 9.2px #f6a8dc;
   -webkit-text-stroke-width: 6px;
-  -webkit-text-stroke-color: #fff;
+  -webkit-text-stroke-color: #f175a5;
   font-size: 50px;
   text-align: center;
 `;

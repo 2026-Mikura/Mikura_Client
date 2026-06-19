@@ -6,7 +6,8 @@ import bg from "../assets/basicBg.png";
 import FullScreenBackground from "../components/FullScreenBackground";
 import { ManitoText, MulmaruText } from "../components/PikuraText";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+// Next.js 백엔드 서버 주소 (로컬: http://localhost:3000, 배포 후: https://your-domain.com)
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 function CompletedPhoto() {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ function CompletedPhoto() {
 
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrError, setQrError] = useState(false);
+  const [savingToPhotoBook, setSavingToPhotoBook] = useState(false);
   const uploadedIdRef = useRef<string | null>(null);
 
   // 페이지 진입 시 사진 업로드 → QR 코드 생성
@@ -24,7 +26,7 @@ function CompletedPhoto() {
 
     async function uploadAndGenerateQr() {
       try {
-        const res = await fetch(`${API_URL}/photos/upload`, {
+        const res = await fetch(`${API_BASE}/api/photos/upload`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageData: completedPhoto }),
@@ -58,25 +60,29 @@ function CompletedPhoto() {
   };
 
   const handleAddToPhotoBook = async () => {
-    if (completedPhoto) {
-      const photoBookPhoto = await createPhotoBookPhoto(completedPhoto);
-      const nextEntry = {
-        id: uploadedIdRef.current ?? `photo-book-${Date.now()}`,
-        photo: photoBookPhoto,
-        memo: "",
-        createdAt: new Date().toISOString(),
-      };
+    if (savingToPhotoBook) return;
+    setSavingToPhotoBook(true);
 
+    let newEntryId: string | null = null;
+
+    if (completedPhoto) {
       try {
-        sessionStorage.setItem("mikuraPendingPhotoBookEntry", JSON.stringify(nextEntry));
+        const photoBookPhoto = await createPhotoBookPhoto(completedPhoto);
+        const res = await fetch(`${API_BASE}/api/photobook`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageData: photoBookPhoto }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          newEntryId = data.id ?? null;
+        }
       } catch (error) {
-        console.warn("Failed to prepare photo book entry, retrying compressed image", error);
-        const smallerPhoto = await createPhotoBookPhoto(completedPhoto, 720, 0.78);
-        sessionStorage.setItem("mikuraPendingPhotoBookEntry", JSON.stringify({ ...nextEntry, photo: smallerPhoto }));
+        console.warn("포토북 저장 실패:", error);
       }
     }
 
-    navigate("/photobook");
+    navigate("/photobook", { state: { newEntryId } });
   };
 
   return (
@@ -118,8 +124,8 @@ function CompletedPhoto() {
             <ActionButton type="button" onClick={handleFinish}>
               끝내기
             </ActionButton>
-            <ActionButton type="button" onClick={handleAddToPhotoBook}>
-              포토북에 넣기
+            <ActionButton type="button" onClick={handleAddToPhotoBook} disabled={savingToPhotoBook}>
+              {savingToPhotoBook ? "저장 중…" : "포토북에 넣기"}
             </ActionButton>
           </ButtonRow>
         </RightArea>
@@ -164,11 +170,10 @@ const TitleText = styled(ManitoText)`
   z-index: 3;
   margin: 0;
   transform: translateX(-50%);
-  color: #ff87ba;
-  text-shadow: 0 0 8px #f6a8dc;
-  -webkit-text-stroke-width: 5px;
-  -webkit-text-stroke-color: #fff;
-  font-size: clamp(28px, 3.2vw, 45px);
+  text-shadow: 0 0 9.2px #f6a8dc;
+  -webkit-text-stroke-width: 6px;
+  -webkit-text-stroke-color: #f175a5;
+  font-size: 50px;
   white-space: nowrap;
 `;
 
@@ -282,24 +287,38 @@ const ButtonRow = styled.div`
 `;
 
 const ActionButton = styled.button`
-  min-height: 44px;
+  min-width: 120px;
+  min-height: 60px;
   border: 0;
-  border-radius: 8px;
-  background: rgba(255, 184, 217, 0.96);
-  color: #fff;
-  font-family: "Mulmaru", "Mulmaru Mono", sans-serif;
-  font-size: 18px;
+  border-radius: 26px;
+  padding: 0 28px;
+  background: #fff;
+  color: #ff87ba;
+  font-family: "Hakgyoansim_ManitoR", "Hakgyoansim Manito R", sans-serif;
+  font-size: 26px;
+  font-weight: 400;
   line-height: 1;
-  box-shadow: 0 3px 0 rgba(255, 145, 196, 0.38);
+  paint-order: stroke fill;
+  -webkit-text-stroke-width: 4px;
+  -webkit-text-stroke-color: #fff;
+  box-shadow:
+    0 4px 0 rgba(255, 180, 216, 0.35),
+    0 2px 12px rgba(255, 160, 210, 0.18);
   cursor: pointer;
-  transition: transform 180ms ease, background-color 180ms ease;
+  transition: filter 0.2s ease, transform 0.2s ease;
 
   &:hover {
-    background: #ffa8d1;
-    transform: translateY(-1px);
+    filter: brightness(1.04);
+    transform: scale(1.04);
   }
 
   &:active {
-    transform: translateY(1px);
+    transform: scale(0.96);
+    box-shadow: 0 2px 0 rgba(255, 180, 216, 0.35);
+  }
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: default;
   }
 `;

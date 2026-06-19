@@ -12,7 +12,9 @@
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.35",
     "@types/styled-components": "^5.1.36",
+    "d3-delaunay": "^6.0.4",
     "fabric": "^7.4.0",
+    "glfx": "^0.0.4",
     "perfect-freehand": "^1.2.3",
     "qrcode": "^1.5.4",
     "react": "^19.2.5",
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@tailwindcss/vite": "^4.2.3",
+    "@types/d3-delaunay": "^6.0.4",
     "@types/node": "^24.12.2",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.14",

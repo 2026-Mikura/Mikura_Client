@@ -39,8 +39,10 @@ function MikuraIntro() {
         $delay="1s"
       />
 
-      <GuideButton img={txt1} onClick={() => navigate("/guide")} />
-      <PhotoBookButton img={txt2} onClick={() => navigate("/photobook")} />
+      <ButtonStack>                                                                                                                                           
+        <GuideButton img={txt1} onClick={() => navigate("/guide")} />
+        <PhotoBookButton img={txt2} onClick={() => navigate("/photobook")} />
+      </ButtonStack>
     </FullScreenBackground>
   );
 }
@@ -112,10 +114,22 @@ const Star = styled.img<{
   animation-delay: ${({ $delay = "0s" }) => $delay};
 `;
 
-const BaseButton = styled(PurikuraButton)`
-  bottom: 23%;
+const ButtonStack = styled.div`
+  position: absolute;
+  bottom: clamp(60px, 35vh, 130px);
   left: 50%;
-  --button-transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 1.5vh, 16px);
+  transform: translateX(-50%);
+`;
+
+const BaseButton = styled(PurikuraButton)`
+  position: static;
+  width: clamp(220px, 25vw, 380px);
+  height: clamp(70px, 8vh, 70px);
+  border: none;
 `;
 
 const GuideButton = styled(BaseButton)`
@@ -125,8 +139,6 @@ const GuideButton = styled(BaseButton)`
 `;
 
 const PhotoBookButton = styled(BaseButton)`
-  bottom: 14%;
-
   & > img {
     width: 70%;
   }
