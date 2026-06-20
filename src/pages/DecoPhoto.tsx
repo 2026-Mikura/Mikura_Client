@@ -1755,15 +1755,15 @@ const PhotoSlotImage = styled.img`
 
 const WorkArea = styled.div`
   position: absolute;
-  top: 33%;
+  top: 50%;
   left: 50%;
   z-index: 2;
   display: grid;
-  width: min(96vw, 1480px);
-  grid-template-columns: minmax(0, 900px) clamp(390px, 32vw, 520px);
-  gap: clamp(0px, 0.5vw, 5px);
+  width: min(98vw, 1680px);
+  grid-template-columns: minmax(0, 1080px) clamp(390px, 32vw, 520px);
+  gap: clamp(4px, 0.8vw, 14px);
   align-items: stretch;
-  transform: translateX(-52%);
+  transform: translate(-50%, -50%);
 `;
 
 const CanvasWrap = styled.div`
