@@ -948,6 +948,7 @@ export default function DecoPhoto() {
       sessionStorage.setItem("mikuraDecoratedPhotos", JSON.stringify(photos));
     }
 
+    sessionStorage.removeItem("mikuraSelectedPhotos");
     navigate("/selectframe", { replace: true });
   }, [navigate, photos]);
 
@@ -1734,7 +1735,7 @@ const PhotoStrip = styled.div`
 `;
 
 const PhotoSlot = styled.button<{ $isActive: boolean }>`
-  height: clamp(110px, 9vw, 175px);
+  height: clamp(130px, 12vw, 230px);
   border: ${({ $isActive }) => ($isActive ? "4px solid #ff8bc4" : "0")};
   border-radius: 14px;
   padding: 0;
@@ -1755,7 +1756,7 @@ const PhotoSlotImage = styled.img`
 
 const WorkArea = styled.div`
   position: absolute;
-  top: 35%;
+  top: calc(16% + clamp(130px, 12vw, 230px) + 20px);
   left: 50%;
   z-index: 2;
   display: grid;

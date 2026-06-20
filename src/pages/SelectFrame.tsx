@@ -147,6 +147,7 @@ function SelectFrame() {
         frameStyle: selectedFrameStyle,
       }),
     );
+    sessionStorage.removeItem("mikuraDecoratedPhotos");
     navigate("/completedphoto");
   }, [decoratedPhotos, navigate, selectedFrame, selectedFrameStyle]);
 

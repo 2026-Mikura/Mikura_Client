@@ -48,6 +48,7 @@ export default function SelectPhoto() {
     }
 
     sessionStorage.setItem("mikuraSelectedPhotos", JSON.stringify(confirmedPhotos));
+    sessionStorage.removeItem("mikuraPhotos");
     navigate("/decophoto");
   }
 
