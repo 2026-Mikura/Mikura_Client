@@ -154,15 +154,15 @@ const StepText = styled(MulmaruText)`
 
 const SelectionLayout = styled.div`
   position: absolute;
-  top: 30%;
+  top: 50%;
   left: 50%;
   z-index: 2;
   display: grid;
-  width: min(88vw, 1120px);
-  grid-template-columns: minmax(0, 700px) minmax(190px, 1fr);
-  gap: clamp(18px, 2.2vw, 38px);
+  width: min(94vw, 1480px);
+  grid-template-columns: minmax(0, 920px) minmax(240px, 1fr);
+  gap: clamp(24px, 2.8vw, 54px);
   align-items: center;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 `;
 
 const FramePreview = styled.div`

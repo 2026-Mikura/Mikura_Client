@@ -408,15 +408,15 @@ const TimerText = styled(MulmaruText)`
 
 const SelectionLayout = styled.div`
   position: absolute;
-  top: 27%;
+  top: 50%;
   left: 50%;
   z-index: 2;
   display: grid;
-  width: min(92vw, 1220px);
-  grid-template-columns: minmax(0, 620px) minmax(360px, 520px);
+  width: min(94vw, 1520px);
+  grid-template-columns: minmax(0, 850px) minmax(360px, 520px);
   gap: clamp(22px, 2.6vw, 48px);
   align-items: center;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 `;
 
 const FramePreview = styled.div`

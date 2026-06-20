@@ -179,15 +179,15 @@ const TitleText = styled(ManitoText)`
 
 const ResultLayout = styled.main`
   position: absolute;
-  top: 22%;
+  top: 50%;
   left: 50%;
   z-index: 2;
   display: grid;
-  width: min(74vw, 1060px);
-  grid-template-columns: minmax(420px, 1fr) 315px;
-  gap: clamp(38px, 5vw, 82px);
+  width: min(88vw, 1360px);
+  grid-template-columns: minmax(620px, 1fr) 315px;
+  gap: clamp(44px, 5vw, 96px);
   align-items: end;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 `;
 
 const PhotoArea = styled.section`
