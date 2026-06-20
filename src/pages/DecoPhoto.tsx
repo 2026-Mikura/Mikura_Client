@@ -2259,7 +2259,7 @@ const SpectrumPicker = styled.input`
 
   &::-webkit-slider-thumb {
     width: 4px;
-    height: clamp(34px, 5.8vw, 90px);
+    height: clamp(80px, 9vw, 175px);
     border: 0;
     border-radius: 999px;
     background: #fff;
@@ -2288,7 +2288,7 @@ const TonePicker = styled.input<{ $hue: number }>`
 
   &::-webkit-slider-thumb {
     width: 4px;
-    height: clamp(90px, 3.5vw, 45px);
+    height: clamp(80px, 9vw, 175px);
     border: 0;
     border-radius: 999px;
     background: #fff;
